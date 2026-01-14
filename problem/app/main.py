@@ -25,15 +25,9 @@ async def runtime_exception_handler(request: Request, exc: Exception):
         content={"message": str(exc)},
     )
 
-# INCLUDE BOTH ROUTERS HERE
-# No extra prefixes needed here because they are defined inside the router files
 app.include_router(prob_router)
 app.include_router(sub_router)
 
 @app.get("/api/v1/problem/health-check")
 async def health_check():
     return "health is running"
-
-if __name__ == "__main__":
-    port = int(os.getenv("SERVER_PORT", 8082))
-    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True)
