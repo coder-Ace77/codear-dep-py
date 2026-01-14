@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, BigInteger, Boolean, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, BigInteger, Boolean, Enum as SQLEnum, Index
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -13,19 +13,23 @@ class SubmissionStatus(str, enum.Enum):
 
 class Problem(Base):
     __tablename__ = "problems"
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, index=True)
-    description = Column(Text)
+    __table_args__ = (
+        Index("idx_problem_title", "title"),
+        Index("idx_problem_difficulty", "difficulty"),
+    )
+
+    id = Column(BigInteger, primary_key=True, index=True)
+    title = Column(String)
+    description = Column(Text) # columnDefinition = "TEXT"
     input_description = Column(String)
     output_description = Column(String)
     constraints = Column(String)
-    difficulty = Column(String, index=True)
-    tags = Column(ARRAY(String))
+    difficulty = Column(String)
+    tags = Column(ARRAY(String)) # columnDefinition = "text[]"
     time_limit_ms = Column(BigInteger)
     memory_limit_mb = Column(Integer)
 
     test_cases = relationship("TestCase", back_populates="problem", cascade="all, delete-orphan")
-
 class TestCase(Base):
     __tablename__ = "test_cases"
     id = Column(Integer, primary_key=True, index=True)

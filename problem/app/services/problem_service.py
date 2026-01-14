@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, text
-from app.models.problem import Problem, Submission
-from app.schemas.problem_schema import ProblemSendDTO, ProblemSummaryDTO
+from app.models.problem import Problem, Submission, TestCase
+from app.schemas.problem_schema import ProblemDTO, ProblemSendDTO, ProblemSummaryDTO
 from app.services.cache_service import CacheService
 from typing import List, Optional
 import json
@@ -15,21 +15,47 @@ class ProblemService:
         self.PROBLEM_COUNT_KEY = "problem_count"
         self.PROBLEM_SEARCH_KEY = "Search_problem"
 
-    def add_problem(self, problem_data: Problem) -> Problem:
-        """Equivalent to Java addProblem: saves problem and clears general caches."""
-        if problem_data.test_cases:
-            for ts in problem_data.test_cases:
-                ts.problem = problem_data
-        
-        self.db.add(problem_data)
-        self.db.commit()
-        self.db.refresh(problem_data)
-        
-        # Invalidate list/count caches
-        CacheService.delete("all_problems_summary")
-        CacheService.delete(self.PROBLEM_COUNT_KEY)
-        CacheService.delete(self.ALL_TAGS_KEY)
-        return problem_data
+    def add_problem(self, problem_dto: ProblemDTO) -> Problem:
+        # 1. Initialize the Problem Model 
+        # Use the camelCase names defined in your ProblemDTO
+        db_problem = Problem(
+            title=problem_dto.title,
+            description=problem_dto.description,
+            input_description=problem_dto.inputDescription, # Use DTO name
+            output_description=problem_dto.outputDescription, # Use DTO name
+            constraints=problem_dto.constraints,
+            difficulty=problem_dto.difficulty,
+            tags=problem_dto.tags,
+            time_limit_ms=problem_dto.timeLimitMs, # Use DTO name
+            memory_limit_mb=problem_dto.memoryLimitMb  # Use DTO name
+        )
+
+        # 2. Handle nested TestCases
+        # Fix: problem_dto.testCases (NOT test_cases)
+        if problem_dto.testCases:
+            db_problem.test_cases = [
+                TestCase(
+                    input=tc.input,
+                    output=tc.output,
+                    is_sample=tc.isSample # Use tc.isSample from TestCaseDTO
+                ) for tc in problem_dto.testCases
+            ]
+
+        try:
+            self.db.add(db_problem)
+            self.db.commit()
+            self.db.refresh(db_problem)
+
+            # 4. Clear Cache Keys
+            CacheService.delete("all_problems_summary")
+            # Ensure PROBLEM_COUNT_KEY is defined in your class or passed correctly
+            CacheService.delete(self.PROBLEM_COUNT_KEY) 
+            
+            return db_problem
+        except Exception as e:
+            self.db.rollback()
+            print(f"Error adding problem: {e}")
+            raise e
 
     def get_problem_by_id(self, problem_id: int):
         key = f"{self.PROBLEM_KEY_PREFIX}{problem_id}"

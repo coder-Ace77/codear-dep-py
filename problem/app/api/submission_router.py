@@ -41,7 +41,7 @@ async def test_polling(submissionId: str):
     Equivalent to TestCaseRun.longPollingService in Java.
     Polls Redis for up to 10 seconds to see if the status has changed from IN_PROGRESS.
     """
-    max_wait_time = 10  # Total seconds to wait
+    max_wait_time = 1  # Total seconds to wait
     poll_interval = 1   # Seconds between each Redis check
     waited = 0
 

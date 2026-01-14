@@ -77,3 +77,34 @@ class SubmissionResponse(BaseModel):
         from_attributes = True
         # This allows camelCase in JSON while keeping snake_case in Python
         populate_by_name = True
+
+from pydantic import BaseModel, Field
+from typing import List, Optional
+
+class TestCaseDTO(BaseModel):
+    id: Optional[int] = None
+    input: str
+    output: str
+    isSample: bool = Field(alias="isSample")
+
+    class Config:
+        populate_by_name = True
+        from_attributes = True
+
+class ProblemDTO(BaseModel):
+    id: Optional[int] = None
+    title: str
+    description: str
+    inputDescription: Optional[str] = Field(None, alias="inputDescription")
+    outputDescription: Optional[str] = Field(None, alias="outputDescription")
+    constraints: Optional[str] = None
+    difficulty: str
+    tags: List[str] = []
+    # Defaults: 1000ms (1s) and 512MB
+    timeLimitMs: int = Field(default=1000, alias="timeLimitMs") 
+    memoryLimitMb: int = Field(default=512, alias="memoryLimitMb")
+    testCases: List[TestCaseDTO] = Field(default=[], alias="testCases")
+
+    class Config:
+        populate_by_name = True
+        from_attributes = True
