@@ -2,6 +2,7 @@ import os
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware  # Import this
 
 from app.api.problem_router import router as prob_router
 from app.api.submission_router import router as sub_router
@@ -13,6 +14,15 @@ app = FastAPI(
     title="Codear Problem Service",
     description="Microservice for problem management and code submission",
     version="1.0.0"
+)
+
+# --- ADD THIS CORS CONFIGURATION ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.exception_handler(Exception)

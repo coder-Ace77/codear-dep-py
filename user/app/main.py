@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from app.api import user_router
 from app.database import engine, Base
+from fastapi.middleware.cors import CORSMiddleware  # Import this
 
 # Create database tables (equivalent to spring.jpa.hibernate.ddl-auto=update)
 Base.metadata.create_all(bind=engine)
