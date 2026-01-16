@@ -62,7 +62,7 @@ class ProblemService:
         
         # 1. Try Cache
         cached_problem = CacheService.get_object(key)
-        if cached_problem:
+        if cached_problem and "testCases" in cached_problem:
             return cached_problem
             
         # 2. Query DB
@@ -81,7 +81,15 @@ class ProblemService:
             "difficulty": db_problem.difficulty,
             "tags": db_problem.tags or [],
             "timeLimitMs": db_problem.time_limit_ms,
-            "memoryLimitMb": db_problem.memory_limit_mb
+            "memoryLimitMb": db_problem.memory_limit_mb,
+            "testCases": [
+                {
+                    "id": tc.id,
+                    "input": tc.input,
+                    "output": tc.output,
+                    "isSample": tc.is_sample
+                } for tc in db_problem.test_cases
+            ]
         }
         
         # 4. Set Cache

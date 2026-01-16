@@ -16,6 +16,8 @@ class User(Base):
     problem_solved_medium = Column(Integer, default=0)
     problem_solved_hard = Column(Integer, default=0)
     problem_solved_total = Column(Integer, default=0)
+    chat_count_week = Column(Integer, default=0)
+    last_chat_reset = Column(DateTime, default=datetime.datetime.utcnow)
 
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
@@ -23,4 +25,5 @@ class ChatMessage(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     content = Column(Text)
     role = Column(String)
+    problem_id = Column(String, nullable=True) # Assuming string ID for problem, nullable for old messages
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)

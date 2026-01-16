@@ -43,6 +43,27 @@ def extract_user_id(token: str) -> Optional[int]:
     except ValueError:
         return None
 
+def extract_user_context(token: str) -> dict:
+    """
+    Decodes the token and returns 'id' and 'username'.
+    """
+    try:
+        payload = jwt.decode(token.strip(), SECRET_KEY, algorithms=[ALGORITHM])
+        user_id_str = payload.get("sub")
+        username = payload.get("username")
+        
+        if not user_id_str:
+            return None
+            
+        return {
+            "id": int(user_id_str),
+            "username": username
+        }
+    except JWTError:
+        return None
+    except ValueError:
+        return None
+
 def is_token_expired(token: str) -> bool:
     """Checks if the token is expired."""
     try:

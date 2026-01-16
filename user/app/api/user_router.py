@@ -37,8 +37,30 @@ async def chat(
     user = user_service.get_user_by_id(user_id)
     
     ai_service = AiService(db)
-    reply = await ai_service.get_ai_response(user, request.problemStatement, request.code, request.userMessage)
+    reply = await ai_service.get_ai_response(
+        user, 
+        request.problemStatement, 
+        request.code, 
+        request.userMessage,
+        request.problemId
+    )
     return {"reply": reply}
+
+@router.get("/chat/history/{problemId}")
+async def get_chat_history(
+    problemId: str,
+    authorization: str = Header(None),
+    db: Session = Depends(get_db)
+):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    token = authorization.split(" ")[1]
+    user_id = security.extract_user_id(token)
+    
+    ai_service = AiService(db)
+    history = await ai_service.get_chat_history(user_id, problemId)
+    return history
 
 @router.get("/user")
 def get_user(

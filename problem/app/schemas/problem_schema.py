@@ -21,6 +21,16 @@ class ProblemSummaryDTO(BaseModel):
     class Config:
         from_attributes = True
 
+class TestCaseDTO(BaseModel):
+    id: Optional[int] = None
+    input: str
+    output: str
+    isSample: bool = Field(alias="isSample")
+
+    class Config:
+        populate_by_name = True
+        from_attributes = True
+
 class ProblemSendDTO(BaseModel):
     id: int
     title: str
@@ -33,9 +43,11 @@ class ProblemSendDTO(BaseModel):
     tags: List[str]
     timeLimitMs: int
     memoryLimitMb: int
+    testCases: List[TestCaseDTO] = Field(default=[], alias="testCases")
 
     class Config:
         from_attributes = True
+        populate_by_name = True
 
 class ProblemsMetaData(BaseModel):
     count: int
@@ -80,16 +92,6 @@ class SubmissionResponse(BaseModel):
 
 from pydantic import BaseModel, Field
 from typing import List, Optional
-
-class TestCaseDTO(BaseModel):
-    id: Optional[int] = None
-    input: str
-    output: str
-    isSample: bool = Field(alias="isSample")
-
-    class Config:
-        populate_by_name = True
-        from_attributes = True
 
 class ProblemDTO(BaseModel):
     id: Optional[int] = None

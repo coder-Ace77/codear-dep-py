@@ -15,6 +15,7 @@ class ChatRequest(BaseModel):
     problemStatement: str
     code: str
     userMessage: str
+    problemId: str
 
 class UserResponse(BaseModel):
     id: int

@@ -55,3 +55,16 @@ class Submission(Base):
     submitted_at = Column(DateTime, default=datetime.datetime.utcnow)
     time_taken_ms = Column(BigInteger)
     memory_used = Column(String)
+
+class Editorial(Base):
+    __tablename__ = "editorials"
+    id = Column(BigInteger, primary_key=True, index=True)
+    problem_id = Column(BigInteger, ForeignKey("problems.id"))
+    user_id = Column(BigInteger) # We don't have user table here, so just ID
+    username = Column(String)
+    title = Column(String)
+    content = Column(Text)
+    is_admin = Column(Boolean, default=False)
+    upvotes = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, onupdate=datetime.datetime.utcnow)

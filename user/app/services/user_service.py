@@ -39,7 +39,7 @@ class UserService:
             return None
         
         # Generate JWT token using user ID as subject
-        return security.create_access_token(data={"sub": str(user.id)})
+        return security.create_access_token(data={"sub": str(user.id), "username": user.username})
 
     def get_user_by_id(self, user_id: int):
         return self.db.query(User).filter(User.id == user_id).first()
