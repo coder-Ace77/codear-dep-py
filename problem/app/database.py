@@ -5,6 +5,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import redis
 from dotenv import load_dotenv
+from sqlalchemy.pool import NullPool
+
 
 load_dotenv()
 
@@ -21,7 +23,8 @@ SQLALCHEMY_DATABASE_URL = f"postgresql://{db_user}:{encoded_password}@{db_host}:
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, 
-    connect_args={"sslmode": "require"}
+    connect_args={"sslmode": "require"},
+    poolclass=NullPool
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
