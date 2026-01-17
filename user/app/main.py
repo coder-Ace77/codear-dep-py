@@ -22,6 +22,7 @@ app.include_router(user_router.router)
 def health_check():
     return "User service is up and running"
 
+
 if __name__ == "__main__":
     import uvicorn
     import os
