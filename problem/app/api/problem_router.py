@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, Header
+from fastapi import APIRouter, Depends, Query, Header, HTTPException
 from typing import List, Optional
 from app.database import get_db
 from app.core import security
@@ -10,9 +10,27 @@ import uuid
 from app.schemas.problem_schema import TestDTO
 from app.core.sqs import send_to_queue, TEST_QUEUE_URL
 from app.services.cache_service import CacheService
+import time
+import logging
+from functools import wraps
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/problem")
 
+def profile_time(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        logger.info(f"Execution time for {func.__name__}: {end_time - start_time:.4f} seconds")
+        return result
+    return wrapper
+
+@profile_time
 @router.get("/search")
 async def search(
     search: Optional[str] = None,
@@ -101,3 +119,11 @@ async def create_problem(problem: ProblemDTO, db: Session = Depends(get_db)):
     service = ProblemService(db)
     saved_problem = service.add_problem(problem)
     return saved_problem
+
+@router.delete("/{id}")
+async def delete_problem(id: int, db: Session = Depends(get_db)):
+    service = ProblemService(db)
+    success = service.delete_problem(id)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Problem with id {id} not found")
+    return {"message": "Problem deleted successfully"}

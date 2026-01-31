@@ -1,10 +1,28 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, text
-from app.models.problem import Problem, Submission, TestCase
+from app.models.problem import Problem, Submission, TestCase, Editorial
 from app.schemas.problem_schema import ProblemDTO, ProblemSendDTO, ProblemSummaryDTO
 from app.services.cache_service import CacheService
+from app.core.local_cache import LocalCache
 from typing import List, Optional
 import json
+import time
+import logging
+from functools import wraps
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def profile_time(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        logger.info(f"Execution time for {func.__name__}: {end_time - start_time:.4f} seconds")
+        return result
+    return wrapper
 
 class ProblemService:
     def __init__(self, db: Session):
@@ -51,12 +69,22 @@ class ProblemService:
             # Ensure PROBLEM_COUNT_KEY is defined in your class or passed correctly
             CacheService.delete(self.PROBLEM_COUNT_KEY) 
             
+            # Clear Local Cache
+            LocalCache.delete(self.PROBLEM_COUNT_KEY)
+            LocalCache.invalidate_prefix(self.PROBLEM_SEARCH_KEY) # Invalidate all search results
+            LocalCache.delete(self.ALL_TAGS_KEY)
+
+            # Clear Redis Search Keys
+            CacheService.delete_pattern(f"{self.PROBLEM_SEARCH_KEY}*")
+            CacheService.delete(self.ALL_TAGS_KEY)
+            
             return db_problem
         except Exception as e:
             self.db.rollback()
             print(f"Error adding problem: {e}")
             raise e
 
+    @profile_time
     def get_problem_by_id(self, problem_id: int):
         key = f"{self.PROBLEM_KEY_PREFIX}{problem_id}"
         
@@ -96,6 +124,7 @@ class ProblemService:
         CacheService.set_object(key, problem_data, expire_seconds=3600)
         return problem_data
 
+    @profile_time
     def get_all_problems(self) -> List[dict]:
         """Equivalent to Java findAllSummaries."""
         db_list = self.db.query(Problem.id, Problem.title, Problem.tags, Problem.difficulty).all()
@@ -104,18 +133,38 @@ class ProblemService:
             for p in db_list
         ]
 
+    @profile_time
     def get_problem_cnt(self) -> int:
+        # L1: Local Cache
+        local_count = LocalCache.get(self.PROBLEM_COUNT_KEY)
+        if local_count is not None:
+            return int(local_count)
+
+        # L2: Redis Cache
         cached_count = CacheService.get_value(self.PROBLEM_COUNT_KEY)
         if cached_count:
+            # Populate L1
+            LocalCache.set(self.PROBLEM_COUNT_KEY, int(cached_count), ttl=None)
             return int(cached_count)
             
         count = self.db.query(Problem).count()
+        
+        # Set L2 and L1
         CacheService.set_object(self.PROBLEM_COUNT_KEY, count, expire_seconds=1800)
+        LocalCache.set(self.PROBLEM_COUNT_KEY, count, ttl=None)
         return count
 
+    @profile_time
     def get_tags_for_problem(self) -> List[str]:
+        # L1
+        local_tags = LocalCache.get(self.ALL_TAGS_KEY)
+        if local_tags:
+            return local_tags
+
+        # L2
         cached_tags = CacheService.get_object(self.ALL_TAGS_KEY)
         if cached_tags:
+            LocalCache.set(self.ALL_TAGS_KEY, cached_tags, ttl=None)
             return cached_tags
             
         query = text("SELECT DISTINCT UNNEST(tags) as tag FROM problems WHERE tags IS NOT NULL")
@@ -123,13 +172,28 @@ class ProblemService:
         tags = sorted([r.tag for r in result if r.tag])
         
         CacheService.set_object(self.ALL_TAGS_KEY, tags, expire_seconds=86400)
+        LocalCache.set(self.ALL_TAGS_KEY, tags, ttl=None)
         return tags
 
+    @profile_time
     def search_problems(self, search: Optional[str], difficulty: Optional[str], tags: Optional[List[str]], page: int, size: int):
+        tags_str = ",".join(sorted(tags)) if tags else "None"
+        cache_key = f"{self.PROBLEM_SEARCH_KEY}:{search or 'None'}:{difficulty or 'None'}:{tags_str}:{page}:{size}"
+        
+        # L1
+        local_result = LocalCache.get(cache_key)
+        if local_result:
+            return local_result
+
+        # L2
+        cached_result = CacheService.get_object(cache_key)
+        if cached_result:
+            LocalCache.set(cache_key, cached_result, ttl=None)
+            return cached_result
+
         offset = page * size
         tag_str = ",".join(tags) if tags else None
         
-        # PostgreSQL Full Text Search + Array Overlap query
         query = text("""
             SELECT id, title, tags, difficulty FROM problems p
             WHERE (:search IS NULL OR :search = '' OR to_tsvector('english', p.title || ' ' || p.description) @@ plainto_tsquery(:search))
@@ -143,9 +207,27 @@ class ProblemService:
             "tags": tag_str, "limit": size, "offset": offset
         }).fetchall()
         
-        return [{"id": r.id, "title": r.title, "tags": r.tags or [], "difficulty": r.difficulty} for r in result]
+        data = [{"id": r.id, "title": r.title, "tags": r.tags or [], "difficulty": r.difficulty} for r in result]
+        CacheService.set_object(cache_key, data, expire_seconds=300)
+        LocalCache.set(cache_key, data, ttl=None)
+        return data
 
+    @profile_time
     def count_filtered_problems(self, search: Optional[str], difficulty: Optional[str], tags: Optional[List[str]]):
+        tags_str = ",".join(sorted(tags)) if tags else "None"
+        cache_key = f"{self.PROBLEM_SEARCH_KEY}_count:{search or 'None'}:{difficulty or 'None'}:{tags_str}"
+        
+        # L1
+        local_count = LocalCache.get(cache_key)
+        if local_count is not None:
+             return int(local_count)
+
+        # L2
+        cached_count = CacheService.get_value(cache_key)
+        if cached_count is not None:
+            LocalCache.set(cache_key, int(cached_count), ttl=None)
+            return int(cached_count)
+
         tag_str = ",".join(tags) if tags else None
         query = text("""
             SELECT COUNT(*) FROM problems p
@@ -153,7 +235,10 @@ class ProblemService:
             AND (:difficulty IS NULL OR :difficulty = '' OR LOWER(p.difficulty) = LOWER(:difficulty))
             AND (:tags IS NULL OR :tags = '' OR p.tags && string_to_array(:tags, ','))
         """)
-        return self.db.execute(query, {"search": search, "difficulty": difficulty, "tags": tag_str}).scalar()
+        count = self.db.execute(query, {"search": search, "difficulty": difficulty, "tags": tag_str}).scalar()
+        CacheService.set_object(cache_key, count, expire_seconds=300)
+        LocalCache.set(cache_key, count, ttl=None)
+        return count
 
     def get_problem_summary_recent(self, user_id: int):
         results = (
@@ -174,3 +259,39 @@ class ProblemService:
             {"id": r.id, "title": r.title, "tags": r.tags or [], "difficulty": r.difficulty}
             for r in results
         ]
+
+    def delete_problem(self, problem_id: int):
+        # 1. Get Problem
+        problem = self.db.query(Problem).filter(Problem.id == problem_id).first()
+        if not problem:
+            return False
+            
+        # 2. Delete Dependencies & Problem
+        try:
+            # Delete Editorials (FK Constraint)
+            self.db.query(Editorial).filter(Editorial.problem_id == problem_id).delete()
+            
+            # Delete Submissions (Cleanup)
+            self.db.query(Submission).filter(Submission.problem_id == problem_id).delete()
+            
+            # Delete Problem (TestCases cascade automatically)
+            self.db.delete(problem)
+            self.db.commit()
+            
+            # 3. Clear Caches
+            key = f"{self.PROBLEM_KEY_PREFIX}{problem_id}"
+            CacheService.delete(key)
+            CacheService.delete("all_problems_summary")
+            CacheService.delete(self.PROBLEM_COUNT_KEY)
+            CacheService.delete(self.ALL_TAGS_KEY)
+            CacheService.delete_pattern(f"{self.PROBLEM_SEARCH_KEY}*")
+            
+            LocalCache.delete(self.PROBLEM_COUNT_KEY)
+            LocalCache.invalidate_prefix(self.PROBLEM_SEARCH_KEY)
+            LocalCache.delete(self.ALL_TAGS_KEY) # Tags might change
+            
+            return True
+        except Exception as e:
+            self.db.rollback()
+            print(f"Error deleting problem: {e}")
+            raise e

@@ -20,3 +20,11 @@ class CacheService:
     @staticmethod
     def get_value(key: str):
         return redis_client.get(key)
+
+    @staticmethod
+    def delete_pattern(pattern: str):
+        count = 0
+        for key in redis_client.scan_iter(pattern):
+            redis_client.delete(key)
+            count += 1
+        return count
