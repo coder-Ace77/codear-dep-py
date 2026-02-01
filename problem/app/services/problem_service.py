@@ -94,11 +94,20 @@ class ProblemService:
             return cached_problem
             
         # 2. Query DB
+        # Use joinedload to eagerly load test_cases if not already handled by lazy loading efficiently enough
+        # But here we filter in Python for simplicity as the number of TCs isn't massive, just their content could be.
+        # Alternatively, we could filter in the query itself:
+        # db_problem = self.db.query(Problem).options(joinedload(Problem.test_cases)).filter(Problem.id == problem_id).first()
+        
         db_problem = self.db.query(Problem).filter(Problem.id == problem_id).first()
+        
         if not db_problem:
             return None
             
         # 3. Map to DTO format
+        # Filter test cases: Only return IS_SAMPLE ones
+        public_test_cases = [tc for tc in db_problem.test_cases if tc.is_sample]
+
         problem_data = {
             "id": db_problem.id,
             "title": db_problem.title,
@@ -116,7 +125,7 @@ class ProblemService:
                     "input": tc.input,
                     "output": tc.output,
                     "isSample": tc.is_sample
-                } for tc in db_problem.test_cases
+                } for tc in public_test_cases
             ]
         }
         
